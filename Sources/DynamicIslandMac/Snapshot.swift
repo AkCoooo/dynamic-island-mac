@@ -24,7 +24,11 @@ enum Snapshot {
                 m.activity = .headphones(name: "AirPods Pro", symbol: "airpodspro", battery: 88, connected: true)
             }),
             ("5-expanded-idle", { m in m.isExpanded = true; fillWeather(m) }),
-            ("6-tab-lyrics", { m in m.isExpanded = true; m.tab = .lyrics; fillTrack(m) }),
+            ("6-tab-clipboard", { m in m.isExpanded = true; m.tab = .clipboard; fillClipboard(m) }),
+            ("13-light-player", { m in m.isExpanded = true; fillTrack(m); AppSettings.shared.theme = .light }),
+            ("14-light-clipboard", { m in
+                m.isExpanded = true; m.tab = .clipboard; fillClipboard(m); AppSettings.shared.theme = .light
+            }),
             ("7-tab-shelf", { m in
                 m.isExpanded = true; m.tab = .shelf
                 m.shelf = ["/System/Applications/Notes.app", "/System/Library/CoreServices/Finder.app",
@@ -41,6 +45,7 @@ enum Snapshot {
         ]
 
         for (name, configure) in cases {
+            AppSettings.shared.theme = .black
             let model = NotchModel()
             model.notchSize = CGSize(width: 185, height: 32)
             model.hasPhysicalNotch = true
@@ -65,19 +70,24 @@ enum Snapshot {
             fillTrack(model)
             fillWeather(model)
             fillEvents(model)
-            AppSettings.shared.lockScreenBigArt = big
-            let view = LockScreenView(model: model)
-                .frame(width: 480, height: 560)
-                .background(LinearGradient(colors: [Color(red: 0.1, green: 0.25, blue: 0.4),
-                                                    Color(red: 0.55, green: 0.7, blue: 0.85)],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing))
-            if let rep = render(view, size: CGSize(width: 480, height: 560)) {
+            AppSettings.shared.lockScreenStyle = big ? .fullScreen : .card
+            // Même composition que sur l'écran : le fond plein écran, puis le contenu par-dessus.
+            let view = ZStack(alignment: .top) {
+                LinearGradient(colors: [Color(red: 0.1, green: 0.25, blue: 0.4),
+                                        Color(red: 0.55, green: 0.7, blue: 0.85)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                if big { LockArtworkBackground(model: model) }
+                LockScreenView(model: model).frame(width: 1512, height: 815)
+            }
+            .frame(width: 1512, height: 982)
+            if let rep = render(view, size: CGSize(width: 1512, height: 982)) {
                 let url = dir.appendingPathComponent("lock-\(big ? "big" : "card").png")
                 try? rep.representation(using: .png, properties: [:])?.write(to: url)
                 print("snapshot: \(url.path)")
             }
         }
-        AppSettings.shared.lockScreenBigArt = false
+        AppSettings.shared.lockScreenStyle = .fullScreen
+        AppSettings.shared.theme = .black
 
         // Logo de la barre des menus, agrandi, sur fond clair et sur fond sombre.
         let icon = MenuBarIcon.make()
@@ -124,6 +134,15 @@ enum Snapshot {
         return rep
     }
 
+    private static func fillClipboard(_ m: NotchModel) {
+        let now = Date()
+        m.clipboard = [
+            ClipItem(text: "https://github.com/AkCoooo/dynamic-island-mac", app: "Safari", date: now.addingTimeInterval(-40)),
+            ClipItem(text: "Réunion déplacée à 15 h, salle Atlas", app: "Messages", date: now.addingTimeInterval(-600)),
+            ClipItem(text: "swift build -c release", app: "Terminal", date: now.addingTimeInterval(-3600)),
+        ]
+    }
+
     private static func fillWeather(_ m: NotchModel) {
         m.weather = WeatherInfo(temperature: 14, high: 17, low: 9, symbol: "cloud.sun.fill", label: "Éclaircies",
                                 place: "Paris")
@@ -151,7 +170,8 @@ enum Snapshot {
             LyricLine(time: 80, text: "Counting every streetlamp like a heartbeat"),
             LyricLine(time: 90, text: "Midnight on the avenue"),
         ]
-        m.artwork = demoArtwork()
+        // SNAPSHOT_ART=/chemin/image : une vraie image à la place de la pochette de démonstration.
+        m.artwork = ProcessInfo.processInfo.environment["SNAPSHOT_ART"].flatMap { NSImage(contentsOfFile: $0) } ?? demoArtwork()
         m.accent = m.artwork?.accentColor() ?? .white
     }
 

@@ -42,6 +42,22 @@ struct WeatherInfo: Equatable {
     var place: String
 }
 
+/// Un élément copié, gardé en mémoire seulement (jamais écrit sur le disque).
+struct ClipItem: Identifiable, Equatable {
+    let id = UUID()
+    var text: String?
+    var image: NSImage?
+    var app: String?
+    var date: Date
+
+    var isLink: Bool {
+        guard let text, let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
+        return url.scheme == "http" || url.scheme == "https"
+    }
+
+    static func == (a: ClipItem, b: ClipItem) -> Bool { a.id == b.id }
+}
+
 struct AgendaEvent: Equatable, Identifiable {
     var id: String
     var title: String
@@ -69,13 +85,13 @@ enum Activity: Equatable {
 }
 
 enum IslandTab: String, CaseIterable, Identifiable {
-    case player, lyrics, shelf, agenda, timer
+    case player, clipboard, shelf, agenda, timer
     var id: String { rawValue }
 
     var symbol: String {
         switch self {
         case .player: return "play.circle.fill"
-        case .lyrics: return "quote.bubble.fill"
+        case .clipboard: return "doc.on.clipboard.fill"
         case .shelf: return "tray.full.fill"
         case .agenda: return "calendar"
         case .timer: return "timer"
@@ -85,7 +101,7 @@ enum IslandTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .player: return "Lecture"
-        case .lyrics: return "Paroles"
+        case .clipboard: return "Presse-papiers"
         case .shelf: return "Étagère"
         case .agenda: return "Agenda"
         case .timer: return "Minuteur"
@@ -129,6 +145,7 @@ final class NotchModel: ObservableObject {
     private(set) var anchorDate = Date()
     weak var controls: PlaybackControls?
     var openSettings: (() -> Void)?
+    var copyClip: ((ClipItem) -> Void)?
 
     // Système
     @Published var battery: BatteryState?
@@ -138,6 +155,7 @@ final class NotchModel: ObservableObject {
     // Agenda, météo, étagère
     @Published var events: [AgendaEvent] = []
     @Published var weather: WeatherInfo?
+    @Published var clipboard: [ClipItem] = []
     @Published var shelf: [URL] = [] {
         didSet { UserDefaults.standard.set(shelf.map(\.path), forKey: "shelf") }
     }

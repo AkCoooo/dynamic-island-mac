@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Ton encoche prend vie.</strong><br>
-  Ta musique, tes paroles, tes fichiers et ton agenda dans une île qui s'ouvre au survol,<br>
+  Ta musique, tes paroles, tes copies, tes fichiers et ton agenda dans une île qui s'ouvre au survol,<br>
   et un lecteur en verre jusque sur l'écran verrouillé.
 </p>
 
@@ -34,7 +34,8 @@
 
 - **Elle s'ouvre au survol.** Passe la souris sur l'encoche : l'île se déplie avec un ressort et se replie quand tu t'éloignes. Pas d'encoche ? Elle dessine la sienne.
 - **Elle joue ta musique.** Spotify et Musique : pochette, titre, barre de lecture que tu peux faire glisser, aléatoire, répétition, et le choix de la sortie audio (haut-parleurs, AirPods, écran, AirPlay).
-- **Elle chante avec toi.** Les paroles se remplissent au fil du chant, et l'onglet Paroles les fait défiler. Un clic sur une ligne y saute.
+- **Elle chante avec toi.** Les paroles synchronisées défilent sous le titre et se remplissent au fil du chant.
+- **Elle se souvient de tes copies.** Les 30 derniers textes, liens et images copiés, à recopier d'un clic. Un raccourci (⇧⌘V par défaut, à choisir dans les réglages) ouvre l'historique près du pointeur, dans n'importe quelle app. En mémoire seulement, et jamais les mots de passe venus d'un gestionnaire de mots de passe.
 - **Elle garde tes fichiers.** Dépose un fichier sur l'île : il attend sur l'étagère jusqu'à ce que tu le glisses ailleurs ou l'envoies par AirDrop.
 - **Elle connaît ta journée.** Prochains rendez-vous, météo, minuteur et chrono, toujours à portée de souris.
 - **Elle te prévient.** Chargeur branché, batterie faible, AirPods connectés, volume, fin du minuteur : l'île s'élargit un instant, puis se fait oublier.
@@ -44,15 +45,23 @@
   <img src="docs/screens/charge.png" width="600" alt="Notification de charge">
 </p>
 
-| Paroles | Étagère |
+| Presse-papiers | Étagère |
 |---|---|
-| <img src="docs/screens/paroles.png" alt="Onglet Paroles"> | <img src="docs/screens/etagere.png" alt="Onglet Étagère"> |
+| <img src="docs/screens/presse-papiers.png" alt="Onglet Presse-papiers"> | <img src="docs/screens/etagere.png" alt="Onglet Étagère"> |
 | **Agenda** | **Minuteur et chrono** |
 | <img src="docs/screens/agenda.png" alt="Onglet Agenda"> | <img src="docs/screens/minuteur.png" alt="Onglet Minuteur"> |
+| **Apparence Clair** | |
+| <img src="docs/screens/clair.png" alt="L'île ouverte en apparence Clair"> | |
 
 ## Sur l'écran verrouillé
 
-Quand tu verrouilles ton Mac (⌃⌘Q), la météo, la batterie et ton prochain rendez-vous s'affichent sous l'horloge, avec un lecteur en verre pour piloter la musique. Tu peux agrandir la pochette et monter ou descendre la carte. L'horloge de macOS et le champ du mot de passe restent visibles, et c'est toujours macOS qui déverrouille.
+Verrouille ton Mac (⌃⌘Q) pendant que la musique joue, ou même en pause : la pochette remplit tout l'écran, nette au centre et floutée vers les bords. Par-dessus, l'heure en grand, la météo, la batterie, la pochette et un petit lecteur en verre pour piloter la musique sans déverrouiller.
+
+<p align="center">
+  <img src="docs/screens/ecran-verrouille.jpg" width="720" alt="L'écran verrouillé avec la pochette en fond">
+</p>
+
+Deux styles plus sobres existent, « Grande pochette » et « Carte », qui gardent le fond d'écran de macOS. Le mot de passe et Touch ID marchent toujours : le fond laisse passer les clics, et une option garde le champ du mot de passe visible.
 
 > [!NOTE]
 > L'écran verrouillé passe par une API privée de macOS. Elle peut cesser de fonctionner après une mise à jour du système : l'option se désactive dans les réglages.
@@ -81,7 +90,7 @@ Trois chemins y mènent :
 - **Clique sur ⚙** en haut à droite de l'île ouverte.
 - **Clique sur le logo de l'île** dans la barre des menus, puis sur **Réglages…** Tu peux masquer ce logo dans les réglages : les deux autres chemins suffisent.
 
-Tu y choisis l'apparence de l'île (Noir ou Verre), le délai d'ouverture, les notifications, les options de l'écran verrouillé, les coins arrondis en bas de l'écran, la ville pour la météo et le lancement à l'ouverture de session.
+Tu y choisis l'apparence (Noir, Verre ou Clair : l'île ouverte, les menus et les réglages suivent), le délai d'ouverture, les notifications, les options de l'écran verrouillé, les coins arrondis en bas de l'écran, la ville pour la météo et le lancement à l'ouverture de session.
 
 <br clear="right">
 
@@ -112,8 +121,9 @@ Ni l'Accessibilité, ni l'enregistrement de l'écran ne sont nécessaires.
 | `NotchView.swift` | La forme de l'île, ses onglets et toutes ses vues |
 | `NotchModel.swift` | L'état partagé : mode, taille, morceau, minuteur, étagère |
 | `NowPlayingService.swift` | Spotify et Musique, pochettes, commandes |
+| `ClipboardMonitor.swift`, `ClipboardPopup.swift`, `HotKey.swift` | L'historique du presse-papiers, sa fenêtre et son raccourci |
 | `LyricsService.swift` | Les paroles synchronisées, depuis [LRCLIB](https://lrclib.net) |
-| `LockScreen.swift` | Les widgets et le lecteur de l'écran verrouillé |
+| `LockScreen.swift` | Le fond, l'heure, les widgets et le lecteur de l'écran verrouillé |
 | `AudioOutputs.swift`, `VolumeMonitor.swift` | Sorties audio et volume (Core Audio) |
 | `SystemMonitors.swift` | Batterie et écouteurs Bluetooth |
 | `AgendaWeather.swift` | Agenda (EventKit) et météo ([Open-Meteo](https://open-meteo.com)) |

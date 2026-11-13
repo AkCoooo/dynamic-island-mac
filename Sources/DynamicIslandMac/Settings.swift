@@ -1,10 +1,19 @@
 import AppKit
+import ApplicationServices
 import ServiceManagement
 import SwiftUI
 
 enum IslandTheme: String, CaseIterable, Identifiable {
     case black = "Noir"
     case glass = "Verre"
+    case light = "Clair"
+    var id: String { rawValue }
+}
+
+enum LockScreenStyle: String, CaseIterable, Identifiable {
+    case fullScreen = "Plein écran"
+    case bigArt = "Grande pochette"
+    case card = "Carte"
     var id: String { rawValue }
 }
 
@@ -26,7 +35,14 @@ final class AppSettings: ObservableObject {
     @Published var showWeather: Bool { didSet { defaults.set(showWeather, forKey: "showWeather") } }
     @Published var weatherCity: String { didSet { defaults.set(weatherCity, forKey: "weatherCity") } }
     @Published var lockScreen: Bool { didSet { defaults.set(lockScreen, forKey: "lockScreen") } }
-    @Published var lockScreenBigArt: Bool { didSet { defaults.set(lockScreenBigArt, forKey: "lockScreenBigArt") } }
+    @Published var lockScreenShowPassword: Bool { didSet { defaults.set(lockScreenShowPassword, forKey: "lockScreenShowPassword") } }
+    @Published var lockScreenStyle: LockScreenStyle { didSet { defaults.set(lockScreenStyle.rawValue, forKey: "lockScreenStyle") } }
+    @Published var clipboardHotKeyCode: Int { didSet { defaults.set(clipboardHotKeyCode, forKey: "clipboardHotKeyCode") } }
+    @Published var clipboardHotKeyMods: Int { didSet { defaults.set(clipboardHotKeyMods, forKey: "clipboardHotKeyMods") } }
+    @Published var clipboardHotKeyLabel: String { didSet { defaults.set(clipboardHotKeyLabel, forKey: "clipboardHotKeyLabel") } }
+    @Published var doubleCopyPopup: Bool { didSet { defaults.set(doubleCopyPopup, forKey: "doubleCopyPopup") } }
+    @Published var pasteDirectly: Bool { didSet { defaults.set(pasteDirectly, forKey: "pasteDirectly") } }
+    @Published var clipboardHistory: Bool { didSet { defaults.set(clipboardHistory, forKey: "clipboardHistory") } }
     @Published var showMenuBarIcon: Bool { didSet { defaults.set(showMenuBarIcon, forKey: "showMenuBarIcon") } }
     @Published var keepAwakeWhilePlaying: Bool { didSet { defaults.set(keepAwakeWhilePlaying, forKey: "keepAwakeWhilePlaying") } }
     @Published var progressiveLyrics: Bool { didSet { defaults.set(progressiveLyrics, forKey: "progressiveLyrics") } }
@@ -39,16 +55,24 @@ final class AppSettings: ObservableObject {
             "theme": IslandTheme.black.rawValue, "hoverDelay": 0.08, "preferMainScreen": false,
             "chargeAlerts": true, "bluetoothAlerts": true, "volumeHUD": true, "haptics": true,
             "roundedCorners": false, "cornerRadius": 10.0, "showCalendar": true, "showWeather": true,
-            "weatherCity": "", "lockScreen": true, "lockScreenBigArt": false,
-            "keepAwakeWhilePlaying": false, "showMenuBarIcon": true, "progressiveLyrics": true, "lockScreenWidgets": true, "lockScreenOffset": 0.0,
+            "weatherCity": "", "lockScreen": true, "lockScreenStyle": LockScreenStyle.fullScreen.rawValue, "lockScreenShowPassword": false,
+            "clipboardHotKeyCode": 9, "clipboardHotKeyMods": 768, "clipboardHotKeyLabel": "⇧⌘V",
+            "keepAwakeWhilePlaying": false, "showMenuBarIcon": true, "clipboardHistory": true, "doubleCopyPopup": true, "pasteDirectly": false, "progressiveLyrics": true, "lockScreenWidgets": true, "lockScreenOffset": 0.0,
         ])
+        clipboardHistory = defaults.bool(forKey: "clipboardHistory")
+        doubleCopyPopup = defaults.bool(forKey: "doubleCopyPopup")
+        pasteDirectly = defaults.bool(forKey: "pasteDirectly")
         showMenuBarIcon = defaults.bool(forKey: "showMenuBarIcon")
         keepAwakeWhilePlaying = defaults.bool(forKey: "keepAwakeWhilePlaying")
         progressiveLyrics = defaults.bool(forKey: "progressiveLyrics")
         lockScreenWidgets = defaults.bool(forKey: "lockScreenWidgets")
         lockScreenOffset = defaults.double(forKey: "lockScreenOffset")
         lockScreen = defaults.bool(forKey: "lockScreen")
-        lockScreenBigArt = defaults.bool(forKey: "lockScreenBigArt")
+        lockScreenShowPassword = defaults.bool(forKey: "lockScreenShowPassword")
+        lockScreenStyle = LockScreenStyle(rawValue: defaults.string(forKey: "lockScreenStyle") ?? "") ?? .fullScreen
+        clipboardHotKeyCode = defaults.integer(forKey: "clipboardHotKeyCode")
+        clipboardHotKeyMods = defaults.integer(forKey: "clipboardHotKeyMods")
+        clipboardHotKeyLabel = defaults.string(forKey: "clipboardHotKeyLabel") ?? "⇧⌘V"
         theme = IslandTheme(rawValue: defaults.string(forKey: "theme") ?? "") ?? .black
         hoverDelay = defaults.double(forKey: "hoverDelay")
         preferMainScreen = defaults.bool(forKey: "preferMainScreen")
@@ -181,7 +205,7 @@ struct SettingsView: View {
             }
 
             Section("Île") {
-                Picker("Apparence de l'île ouverte", selection: $settings.theme) {
+                Picker("Apparence", selection: $settings.theme) {
                     ForEach(IslandTheme.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -191,6 +215,31 @@ struct SettingsView: View {
                         Text("\(Int(settings.hoverDelay * 1000)) ms").monospacedDigit().frame(width: 52)
                     }
                 }
+            }
+
+            Section("Presse-papiers") {
+                Toggle("Garder l'historique des copies", isOn: $settings.clipboardHistory)
+                LabeledContent("Raccourci pour ouvrir l'historique") { ShortcutRecorder() }
+                    .disabled(!settings.clipboardHistory)
+                Toggle("Double ⌘C ouvre aussi l'historique", isOn: $settings.doubleCopyPopup)
+                    .disabled(!settings.clipboardHistory)
+                Toggle("Coller directement l'élément choisi", isOn: Binding(
+                    get: { settings.pasteDirectly },
+                    set: { on in
+                        settings.pasteDirectly = on
+                        // Simuler ⌘V demande l'autorisation Accessibilité : macOS ouvre sa demande.
+                        if on && !AXIsProcessTrusted() {
+                            _ = AXIsProcessTrustedWithOptions(
+                                [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
+                        }
+                    }))
+                    .disabled(!settings.clipboardHistory)
+                if settings.pasteDirectly && !AXIsProcessTrusted() {
+                    Text("Autorise Dynamic Island Mac dans Réglages Système › Confidentialité › Accessibilité. Sans ça, l'élément choisi est copié et tu colles avec ⌘V.")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                Text("Les 30 dernières copies, en mémoire seulement. Les mots de passe copiés depuis un gestionnaire de mots de passe sont ignorés.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Notifications dans l'île") {
@@ -203,7 +252,15 @@ struct SettingsView: View {
                 Toggle("Lecteur et widgets sur l'écran verrouillé", isOn: $settings.lockScreen)
                 Group {
                     Toggle("Widgets météo, batterie et agenda", isOn: $settings.lockScreenWidgets)
-                    Toggle("Grande pochette", isOn: $settings.lockScreenBigArt)
+                    Picker("Style", selection: $settings.lockScreenStyle) {
+                        ForEach(LockScreenStyle.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    if settings.lockScreenStyle == .fullScreen {
+                        Toggle("Laisser voir le champ mot de passe en bas", isOn: $settings.lockScreenShowPassword)
+                        Text("La pochette remplit tout l'écran. Même si le champ est caché, tape ton mot de passe puis ↩, ou utilise Touch ID : ça marche pareil.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     LabeledContent("Position verticale") {
                         HStack {
                             Slider(value: $settings.lockScreenOffset, in: -160...160, step: 10)

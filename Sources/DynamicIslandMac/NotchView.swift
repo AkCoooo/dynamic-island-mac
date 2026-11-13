@@ -37,16 +37,20 @@ struct NotchShape: Shape {
 /// Flou d'arrière-plan AppKit, pour le thème « Verre ».
 struct VisualEffectView: NSViewRepresentable {
     var material: NSVisualEffectView.Material = .hudWindow
+    var dark = true
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let v = NSVisualEffectView()
-        v.material = material
         v.blendingMode = .behindWindow
         v.state = .active
+        updateNSView(v, context: context)
         return v
     }
 
-    func updateNSView(_ v: NSVisualEffectView, context: Context) { v.material = material }
+    func updateNSView(_ v: NSVisualEffectView, context: Context) {
+        v.material = material
+        v.appearance = NSAppearance(named: dark ? .vibrantDark : .vibrantLight)
+    }
 }
 
 // MARK: - Racine
@@ -88,16 +92,23 @@ struct NotchRootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: model.mode)
         .animation(.spring(response: 0.38, dampingFraction: 0.85), value: model.tab)
-        .environment(\.colorScheme, .dark)
+        // L'île réduite reste noire pour se fondre dans l'encoche ; le thème s'applique à l'île ouverte.
+        .environment(\.colorScheme, expanded && settings.theme == .light ? .light : .dark)
     }
 
     @ViewBuilder private func background(expanded: Bool) -> some View {
-        if expanded && settings.theme == .glass {
+        switch (expanded, settings.theme) {
+        case (true, .glass):
             ZStack {
-                VisualEffectView(material: .hudWindow)
-                Color.black.opacity(0.3)
+                VisualEffectView(material: .hudWindow, dark: true)
+                Color.black.opacity(0.12)
             }
-        } else {
+        case (true, .light):
+            ZStack {
+                VisualEffectView(material: .popover, dark: false)
+                Color.white.opacity(0.55)
+            }
+        default:
             Color.black
         }
     }
@@ -186,7 +197,7 @@ struct ActivityView: View {
                     .symbolEffect(.bounce, value: activity.id)
                 Text(leadingText)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.primary)
                     .lineLimit(1)
             }
             Spacer(minLength: notchWidth + 8)
@@ -200,8 +211,8 @@ struct ActivityView: View {
         if case .volume(let level, let muted) = activity {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.2))
-                    Capsule().fill(.white).frame(width: geo.size.width * CGFloat(muted ? 0 : level))
+                    Capsule().fill(Color.primary.opacity(0.2))
+                    Capsule().fill(Color.primary).frame(width: geo.size.width * CGFloat(muted ? 0 : level))
                 }
             }
             .frame(width: 74, height: 5)
@@ -247,8 +258,8 @@ struct ActivityView: View {
     private var tint: Color {
         switch activity {
         case .power(let b): return b.pluggedIn ? .green : (b.percent <= 10 ? .red : .orange)
-        case .headphones(_, _, _, let connected): return connected ? .white : .gray
-        case .volume: return .white
+        case .headphones(_, _, _, let connected): return connected ? Color.primary : .gray
+        case .volume: return Color.primary
         case .message(_, _, _, let tint): return tint
         }
     }
@@ -270,7 +281,7 @@ struct ExpandedView: View {
                     } else {
                         IdleClockView(model: model)
                     }
-                case .lyrics: FullLyricsView(model: model)
+                case .clipboard: ClipboardView(model: model)
                 case .shelf: ShelfView(model: model)
                 case .agenda: AgendaView(model: model)
                 case .timer: TimerTabView(model: model)
@@ -303,7 +314,7 @@ struct ExpandedView: View {
                         Text("\(w.temperature)°").monospacedDigit()
                     }
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(Color.primary.opacity(0.75))
                 }
                 if let b = model.battery { BatteryBadge(battery: b) }
                 SettingsGearButton { model.openSettings?() }
@@ -325,9 +336,9 @@ struct TabButton: View {
         Button(action: action) {
             Image(systemName: tab.symbol)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(selected ? .white : .white.opacity(hovering ? 0.8 : 0.45))
+                .foregroundStyle(selected ? Color.primary : Color.primary.opacity(hovering ? 0.8 : 0.45))
                 .frame(width: 28, height: 22)
-                .background(Capsule().fill(.white.opacity(selected ? 0.16 : (hovering ? 0.07 : 0))))
+                .background(Capsule().fill(Color.primary.opacity(selected ? 0.16 : (hovering ? 0.07 : 0))))
         }
         .buttonStyle(.plain)
         .help(tab.title)
@@ -343,9 +354,9 @@ struct SettingsGearButton: View {
         Button(action: action) {
             Image(systemName: "gearshape.fill")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(hovering ? 0.95 : 0.55))
+                .foregroundStyle(Color.primary.opacity(hovering ? 0.95 : 0.55))
                 .frame(width: 24, height: 22)
-                .background(Capsule().fill(.white.opacity(hovering ? 0.12 : 0)))
+                .background(Capsule().fill(Color.primary.opacity(hovering ? 0.12 : 0)))
         }
         .buttonStyle(.plain)
         .help("Réglages")
@@ -371,10 +382,10 @@ struct PlayerView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(track.title)
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color.primary)
                         Text(track.artist)
                             .font(.system(size: 13))
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(Color.primary.opacity(0.6))
                     }
                     .lineLimit(1)
                     .id(track.id)
@@ -433,9 +444,9 @@ struct ToggleIconButton: View {
             Image(systemName: symbol)
                 .font(.system(size: 12, weight: .semibold))
                 .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(active ? .white : .white.opacity(hovering ? 0.7 : 0.4))
+                .foregroundStyle(active ? Color.primary : Color.primary.opacity(hovering ? 0.7 : 0.4))
                 .frame(width: 26, height: 24)
-                .background(Circle().fill(.white.opacity(active ? 0.16 : 0)))
+                .background(Circle().fill(Color.primary.opacity(active ? 0.16 : 0)))
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -461,7 +472,7 @@ struct AudioOutputMenu: View {
         } label: {
             Image(systemName: outputs.first(where: { $0.id == current })?.symbol ?? "airplayaudio")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(Color.primary.opacity(0.6))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -488,9 +499,9 @@ struct ControlButton: View {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .semibold))
                 .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.primary)
                 .frame(width: 34, height: 30)
-                .background(Circle().fill(.white.opacity(hovering ? 0.12 : 0)))
+                .background(Circle().fill(Color.primary.opacity(hovering ? 0.12 : 0)))
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -511,7 +522,7 @@ struct ProgressBarView: View {
                 Text(formatDuration(dragFraction.map { $0 * duration } ?? position))
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(0.18))
+                        Capsule().fill(Color.primary.opacity(0.18))
                         Capsule().fill(model.accent)
                             .frame(width: max(0, min(1, fraction)) * geo.size.width)
                     }
@@ -531,7 +542,7 @@ struct ProgressBarView: View {
                 Text("-" + formatDuration(max(0, duration - position)))
             }
             .font(.system(size: 10, weight: .medium).monospacedDigit())
-            .foregroundStyle(.white.opacity(0.5))
+            .foregroundStyle(Color.primary.opacity(0.5))
             .animation(.easeOut(duration: 0.15), value: dragFraction == nil)
         }
     }
@@ -584,7 +595,7 @@ struct KaraokeText: View {
             .lineLimit(1)
             .minimumScaleFactor(0.75)
         label
-            .foregroundStyle(.white.opacity(0.35))
+            .foregroundStyle(Color.primary.opacity(0.35))
             .overlay(alignment: .leading) {
                 label
                     .foregroundStyle(accent)
@@ -602,56 +613,90 @@ struct KaraokeText: View {
     }
 }
 
-// MARK: Paroles
+// MARK: Presse-papiers
 
-struct FullLyricsView: View {
+struct ClipboardView: View {
     @ObservedObject var model: NotchModel
+    @ObservedObject var settings = AppSettings.shared
 
     var body: some View {
-        if model.lyrics.isEmpty {
-            EmptyStateView(symbol: "quote.bubble",
-                           text: model.track == nil ? "Rien en lecture." : "Pas de paroles synchronisées pour ce morceau.")
+        if !settings.clipboardHistory {
+            EmptyStateView(symbol: "doc.on.clipboard", text: "Historique désactivé dans les réglages.")
+        } else if model.clipboard.isEmpty {
+            EmptyStateView(symbol: "doc.on.clipboard", text: "Copie quelque chose : ça apparaîtra ici.")
         } else {
-            TimelineView(.periodic(from: .now, by: 0.25)) { ctx in
-                LyricsScroller(lines: model.lyrics, current: model.currentLyricIndex(at: ctx.date),
-                               accent: model.accent) { model.controls?.seek(to: $0) }
+            VStack(spacing: 6) {
+                HStack {
+                    Text("Clique pour recopier").font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Color.primary.opacity(0.5))
+                    Spacer()
+                    SmallPill(symbol: "trash", text: "Effacer") {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { model.clipboard.removeAll() }
+                    }
+                }
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 2) {
+                        ForEach(model.clipboard) { item in
+                            ClipRow(item: item) { model.copyClip?(item) }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-private struct LyricsScroller: View {
-    let lines: [LyricLine]
-    let current: Int?
-    let accent: Color
-    let seek: (Double) -> Void
+struct ClipRow: View {
+    let item: ClipItem
+    let copy: () -> Void
+    @State private var hovering = false
+    @State private var copied = false
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 9) {
-                    Color.clear.frame(height: 40)
-                    ForEach(Array(lines.enumerated()), id: \.offset) { i, line in
-                        Text(line.text.isEmpty ? "♪" : line.text)
-                            .font(.system(size: i == current ? 17 : 15, weight: .bold))
-                            .foregroundStyle(i == current ? accent : .white.opacity(i < (current ?? -1) ? 0.3 : 0.45))
-                            .shadow(color: i == current ? accent.opacity(0.5) : .clear, radius: 8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                            .onTapGesture { seek(line.time) }
-                            .id(i)
-                    }
-                    Color.clear.frame(height: 40)
+        Button {
+            copy()
+            copied = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+        } label: {
+            HStack(spacing: 10) {
+                thumbnail
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.text.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? "Image")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.primary)
+                        .lineLimit(1)
+                    Text([item.app, item.date.formatted(.relative(presentation: .named))]
+                        .compactMap { $0 }.joined(separator: " · "))
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.primary.opacity(0.45))
                 }
+                Spacer(minLength: 6)
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(copied ? Color.green : Color.primary.opacity(hovering ? 0.8 : 0))
+                    .contentTransition(.symbolEffect(.replace))
             }
-            .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.25),
-                                         .init(color: .black, location: 0.75), .init(color: .clear, location: 1)],
-                                 startPoint: .top, endPoint: .bottom))
-            .onChange(of: current) { _, new in
-                guard let new else { return }
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.9)) { proxy.scrollTo(new, anchor: .center) }
-            }
-            .onAppear { if let current { proxy.scrollTo(current, anchor: .center) } }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color.primary.opacity(hovering ? 0.08 : 0)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+
+    @ViewBuilder private var thumbnail: some View {
+        if let image = item.image {
+            Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+                .frame(width: 26, height: 26)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        } else {
+            Image(systemName: item.isLink ? "link" : "text.alignleft")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.primary.opacity(0.6))
+                .frame(width: 26, height: 26)
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.primary.opacity(0.08)))
         }
     }
 }
@@ -664,22 +709,22 @@ struct ShelfView: View {
     var body: some View {
         if model.shelf.isEmpty {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(.white.opacity(0.25), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+                .strokeBorder(Color.primary.opacity(0.25), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
                 .overlay {
                     VStack(spacing: 6) {
                         Image(systemName: "tray.and.arrow.down.fill").font(.system(size: 26))
                         Text("Dépose des fichiers ici").font(.system(size: 13, weight: .medium))
                         Text("Ils restent là jusqu'à ce que tu les glisses ailleurs.")
-                            .font(.system(size: 11)).foregroundStyle(.white.opacity(0.4))
+                            .font(.system(size: 11)).foregroundStyle(Color.primary.opacity(0.4))
                     }
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(Color.primary.opacity(0.7))
                 }
                 .padding(.bottom, 16)
         } else {
             VStack(spacing: 8) {
                 HStack {
                     Text("\(model.shelf.count) élément\(model.shelf.count > 1 ? "s" : "")")
-                        .font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.5))
+                        .font(.system(size: 11, weight: .medium)).foregroundStyle(Color.primary.opacity(0.5))
                     Spacer()
                     SmallPill(symbol: "airplayaudio", text: "AirDrop") { Shelf.airDrop(model.shelf) }
                     SmallPill(symbol: "trash", text: "Vider") {
@@ -719,18 +764,18 @@ struct ShelfItemView: View {
                 .frame(width: 48, height: 48)
             Text(url.lastPathComponent)
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(Color.primary.opacity(0.85))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(width: 76, height: 26, alignment: .top)
         }
         .padding(6)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(hovering ? 0.1 : 0)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.primary.opacity(hovering ? 0.1 : 0)))
         .overlay(alignment: .topTrailing) {
             if hovering {
                 Button(action: remove) {
                     Image(systemName: "xmark.circle.fill").font(.system(size: 14))
-                        .foregroundStyle(.white, .gray.opacity(0.8))
+                        .foregroundStyle(Color.primary, .gray.opacity(0.8))
                 }
                 .buttonStyle(.plain)
                 .offset(x: 2, y: -2)
@@ -762,10 +807,10 @@ struct SmallPill: View {
                 if symbol.isEmpty { Text(text) } else { Label(text, systemImage: symbol) }
             }
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(Color.primary.opacity(0.85))
                 .padding(.horizontal, 9)
                 .padding(.vertical, 4)
-                .background(Capsule().fill(.white.opacity(hovering ? 0.18 : 0.1)))
+                .background(Capsule().fill(Color.primary.opacity(hovering ? 0.18 : 0.1)))
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -789,14 +834,14 @@ struct AgendaView: View {
                     HStack(spacing: 10) {
                         Capsule().fill(event.color).frame(width: 4, height: 26)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(event.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                            Text(timeRange(event)).font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                            Text(event.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.primary)
+                            Text(timeRange(event)).font(.system(size: 11)).foregroundStyle(Color.primary.opacity(0.5))
                         }
                         .lineLimit(1)
                         Spacer()
                         Text(relative(event))
                             .font(.system(size: 11, weight: .medium).monospacedDigit())
-                            .foregroundStyle(event.start <= Date() ? event.color : .white.opacity(0.55))
+                            .foregroundStyle(event.start <= Date() ? event.color : Color.primary.opacity(0.55))
                     }
                 }
             }
@@ -831,7 +876,7 @@ struct TimerTabView: View {
                 TimelineView(.periodic(from: .now, by: 0.5)) { ctx in
                     Text(formatDuration(model.timerRunning ? model.timerRemaining(at: ctx.date).rounded(.up) : 0))
                         .font(.system(size: 34, weight: .semibold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(model.timerRunning ? .white : .white.opacity(0.35))
+                        .foregroundStyle(model.timerRunning ? Color.primary : Color.primary.opacity(0.35))
                 }
                 if model.timerRunning {
                     HStack(spacing: 8) {
@@ -848,7 +893,7 @@ struct TimerTabView: View {
             }
             .frame(maxWidth: .infinity)
 
-            Rectangle().fill(.white.opacity(0.1)).frame(width: 1, height: 110)
+            Rectangle().fill(Color.primary.opacity(0.1)).frame(width: 1, height: 110)
 
             VStack(spacing: 10) {
                 Label("Chrono", systemImage: "stopwatch").font(.system(size: 11, weight: .medium))
@@ -857,7 +902,7 @@ struct TimerTabView: View {
                     let t = model.stopwatchElapsed(at: ctx.date)
                     Text(formatDuration(t) + String(format: ",%d", Int((t * 10).truncatingRemainder(dividingBy: 10))))
                         .font(.system(size: 34, weight: .semibold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(model.stopwatchRunning || t > 0 ? .white : .white.opacity(0.35))
+                        .foregroundStyle(model.stopwatchRunning || t > 0 ? Color.primary : Color.primary.opacity(0.35))
                 }
                 HStack(spacing: 8) {
                     SmallPill(symbol: model.stopwatchRunning ? "pause.fill" : "play.fill",
@@ -881,10 +926,10 @@ struct IdleClockView: View {
             VStack(spacing: 2) {
                 Text(context.date, format: .dateTime.hour().minute())
                     .font(.system(size: 44, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.primary)
                 Text(context.date, format: .dateTime.weekday(.wide).day().month(.wide))
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(Color.primary.opacity(0.55))
                 HStack(spacing: 14) {
                     if let w = model.weather {
                         Label("\(w.label), \(w.temperature)° (\(w.low)° / \(w.high)°)", systemImage: w.symbol)
@@ -895,7 +940,7 @@ struct IdleClockView: View {
                     }
                 }
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(Color.primary.opacity(0.5))
                 .padding(.top, 10)
             }
             .frame(maxWidth: .infinity)
@@ -913,7 +958,7 @@ struct EmptyStateView: View {
             Image(systemName: symbol).font(.system(size: 26))
             Text(text).font(.system(size: 12, weight: .medium))
         }
-        .foregroundStyle(.white.opacity(0.45))
+        .foregroundStyle(Color.primary.opacity(0.45))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.bottom, 14)
     }
@@ -934,7 +979,7 @@ struct ArtworkView: View {
                 LinearGradient(colors: [.gray.opacity(0.5), .gray.opacity(0.2)], startPoint: .top, endPoint: .bottom)
                 Image(systemName: "music.note")
                     .font(.system(size: size * 0.4, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(Color.primary.opacity(0.7))
             }
         }
         .frame(width: size, height: size)
@@ -976,10 +1021,10 @@ struct BatteryBadge: View {
         HStack(spacing: 5) {
             Text("\(battery.percent) %")
                 .font(.system(size: 11, weight: .medium).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(Color.primary.opacity(0.7))
             Image(systemName: batterySymbol(battery))
                 .font(.system(size: 13))
-                .foregroundStyle(battery.pluggedIn ? .green : (battery.percent <= 20 ? .red : .white.opacity(0.8)))
+                .foregroundStyle(battery.pluggedIn ? .green : (battery.percent <= 20 ? .red : Color.primary.opacity(0.8)))
         }
     }
 }

@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var weather: WeatherService?
     private var lockScreen: LockScreenController?
     private var keepAwake: KeepAwake?
+    private var clipboard: ClipboardMonitor?
+    private var clipboardPopup: ClipboardPopupController?
     private let settingsWindow = SettingsWindowController()
     private var statusItem: NSStatusItem?
     private var cancellables: Set<AnyCancellable> = []
@@ -28,14 +30,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         notch = NotchWindowController(model: model)
         power = PowerMonitor(model: model)
-        bluetooth = BluetoothMonitor(model: model)
         volume = VolumeMonitor(model: model)
         corners = CornerOverlayController()
         calendar = CalendarService(model: model)
         weather = WeatherService(model: model)
         lockScreen = LockScreenController(model: model)
+        lockScreen?.refreshNowPlaying = { [weak nowPlaying] in
+            nowPlaying?.refresh(.spotify)
+            nowPlaying?.refresh(.music)
+        }
         keepAwake = KeepAwake(model: model)
+        let clipboard = ClipboardMonitor(model: model)
+        self.clipboard = clipboard
+        model.copyClip = { [weak clipboard] item in clipboard?.copy(item) }
+        let popup = ClipboardPopupController(model: model)
+        clipboardPopup = popup
+        clipboard.onDoubleCopy = { [weak popup] in popup?.show() }
+        HotKeyCenter.shared.action = { [weak popup] in
+            guard AppSettings.shared.clipboardHistory else { return }
+            popup?.show()
+        }
+        let settings = AppSettings.shared
+        HotKeyCenter.shared.apply(keyCode: settings.clipboardHotKeyCode, modifiers: settings.clipboardHotKeyMods)
+        settings.$clipboardHotKeyCode.dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { code in HotKeyCenter.shared.apply(keyCode: code, modifiers: AppSettings.shared.clipboardHotKeyMods) }
+            .store(in: &cancellables)
+
+        // Menus et réglages suivent l'apparence choisie.
+        AppSettings.shared.$theme
+            .receive(on: RunLoop.main)
+            .sink { theme in NSApp.appearance = NSAppearance(named: theme == .light ? .aqua : .darkAqua) }
+            .store(in: &cancellables)
         setupStatusItem()
+        bluetooth = BluetoothMonitor(model: model)
 
         // Trois accès aux réglages : le bouton ⚙ de l'île, le menu de la barre des menus,
         // et un nouveau lancement de l'app (Applications, Launchpad, Spotlight).

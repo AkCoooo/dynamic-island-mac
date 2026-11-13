@@ -34,28 +34,47 @@ final class SkyLightSpace {
             available = false
             return
         }
+        // Niveau des notifications sur l'écran verrouillé : c'est lui qui passe au-dessus du verrou.
+        // La constante est exportée par SkyLight ; 400 en repli si elle a disparu.
+        var level: Int32 = 400
+        if let constant = dlsym(handle, "kSLSSpaceAbsoluteLevelNotificationCenterAtScreenLock") {
+            level = constant.assumingMemoryBound(to: Int32.self).pointee
+        }
         connection = unsafeBitCast(mainID, to: MainConnectionID.self)()
         space = unsafeBitCast(create, to: SpaceCreate.self)(connection, 1, 0)
-        _ = unsafeBitCast(setLevel, to: SpaceSetAbsoluteLevel.self)(connection, space, 100)
+        let levelResult = unsafeBitCast(setLevel, to: SpaceSetAbsoluteLevel.self)(connection, space, level)
         _ = unsafeBitCast(show, to: ShowSpaces.self)(connection, [space] as CFArray)
         addWindows = unsafeBitCast(add, to: AddWindows.self)
         available = true
+        debugLog("lock: espace SkyLight \(space) au niveau \(level) (réglage → \(levelResult))")
     }
 
     func adopt(_ window: NSWindow) {
         guard available, let addWindows else { return }
-        _ = addWindows(connection, space, [window.windowNumber] as CFArray, 7)
+        let result = addWindows(connection, space, [window.windowNumber] as CFArray, 7)
+        debugLog("lock: SkyLight space \(space), connexion \(connection), ajout fenêtre → \(result)")
     }
 }
 
 // MARK: - Contrôleur
 
 /// Affiche les widgets et le lecteur pendant que l'écran est verrouillé.
+///
+/// Le signal « écran verrouillé » arrive avant que macOS dessine son écran de verrouillage.
+/// Une fenêtre ouverte à ce moment-là est vite recouverte. On prépare donc tout au lancement :
+/// l'espace SkyLight est créé, la fenêtre y est placée une fois pour toutes et n'en sort plus.
+/// Hors verrouillage, elle reste invisible et laisse passer les clics.
 final class LockScreenController {
     private let model: NotchModel
+    /// Deux fenêtres : le fond plein écran (transparent aux clics) et le contenu interactif.
+    private var lockBackground: NSPanel?
     private var lockWindow: NSPanel?
+    private var previewBackground: NSPanel?
     private var previewWindow: NSPanel?
     private(set) var isLocked = false
+    private var cancellables: Set<AnyCancellable> = []
+    /// Relit l'état des lecteurs : la carte s'affiche aussi pour un morceau en pause.
+    var refreshNowPlaying: (() -> Void)?
 
     init(model: NotchModel) {
         self.model = model
@@ -66,74 +85,114 @@ final class LockScreenController {
         dnc.addObserver(forName: Notification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
             self?.unlocked()
         }
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
+                                               object: nil, queue: .main) { [weak self] _ in
+            self?.positionAll()
+        }
+        prepareLockWindows()
+        // Le morceau peut arriver ou changer pendant le verrouillage : le fond suit.
+        model.$track.receive(on: RunLoop.main).sink { [weak self] _ in
+            guard let self, self.isLocked, AppSettings.shared.lockScreen else { return }
+            DispatchQueue.main.async { self.lockBackground?.alphaValue = self.showsBackground ? 1 : 0 }
+        }.store(in: &cancellables)
+    }
+
+    private func prepareLockWindows() {
+        guard SkyLightSpace.shared.available else {
+            debugLog("lock: SkyLight indisponible, pas de lecteur sur l'écran verrouillé")
+            return
+        }
+        // Le fond d'abord, le contenu ensuite : le contenu est ajouté par-dessus dans l'espace.
+        let bg = makeBackgroundWindow(level: NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 1))
+        let w = makeContentWindow(level: NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()) + 2))
+        for window in [bg, w] {
+            window.alphaValue = 0
+            window.orderFrontRegardless()   // il faut un numéro de fenêtre avant de la confier à SkyLight
+            SkyLightSpace.shared.adopt(window)
+        }
+        w.ignoresMouseEvents = true
+        lockBackground = bg
+        lockWindow = w
+        positionAll()
+        debugLog("lock: fenêtres \(bg.windowNumber) (fond) et \(w.windowNumber) (contenu) prêtes")
+    }
+
+    private var showsBackground: Bool {
+        AppSettings.shared.lockScreenStyle == .fullScreen && model.track != nil
     }
 
     private func locked() {
         isLocked = true
-        guard AppSettings.shared.lockScreen, SkyLightSpace.shared.available else { return }
-        if lockWindow == nil {
-            let w = makeWindow()
-            w.orderFrontRegardless() // il faut un numéro de fenêtre avant de la confier à SkyLight
-            SkyLightSpace.shared.adopt(w)
-            lockWindow = w
-        }
-        guard let w = lockWindow else { return }
-        position(w)
-        w.alphaValue = 0
-        w.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.5
-            w.animator().alphaValue = 1
-        }
+        debugLog("lock: écran verrouillé (option \(AppSettings.shared.lockScreen))")
+        guard AppSettings.shared.lockScreen, let w = lockWindow, let bg = lockBackground else { return }
+        refreshNowPlaying?()
+        positionAll()
+        bg.alphaValue = showsBackground ? 1 : 0
+        w.alphaValue = 1
+        w.ignoresMouseEvents = false
+        debugLog("lock: affiché, fond \(showsBackground), morceau \(model.track?.title ?? "aucun") (\(model.isPlaying ? "lecture" : "pause"))")
     }
 
     private func unlocked() {
         isLocked = false
-        guard let w = lockWindow else { return }
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.25
-            w.animator().alphaValue = 0
-        }, completionHandler: {
-            if !self.isLocked { w.orderOut(nil) }
-        })
+        debugLog("lock: écran déverrouillé")
+        lockBackground?.alphaValue = 0
+        lockWindow?.alphaValue = 0
+        lockWindow?.ignoresMouseEvents = true
     }
 
-    /// Aperçu sur le bureau, sans verrouiller (menu de la barre des menus).
+    /// Aperçu sur le bureau, sans verrouiller (menu de la barre des menus). Un clic n'importe où le ferme.
     func togglePreview() {
         if let w = previewWindow, w.isVisible {
             w.orderOut(nil)
+            previewBackground?.orderOut(nil)
             return
         }
-        let w = previewWindow ?? makeWindow()
-        w.level = .floating
-        position(w)
-        w.orderFrontRegardless()
+        let bg = previewBackground ?? makeBackgroundWindow(level: .floating)
+        let w = previewWindow ?? makeContentWindow(level: NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1))
+        previewBackground = bg
         previewWindow = w
+        positionAll()
+        if showsBackground { bg.orderFrontRegardless() }
+        w.orderFrontRegardless()
     }
 
-    private func makeWindow() -> NSPanel {
+    private func makePanel(level: NSWindow.Level) -> NSPanel {
         let w = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: false)
         w.isOpaque = false
         w.backgroundColor = .clear
         w.hasShadow = false
         w.isReleasedWhenClosed = false
-        w.level = .screenSaver
+        w.canHide = false
+        w.hidesOnDeactivate = false
+        w.level = level
         w.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+        return w
+    }
+
+    /// Le fond ne capte jamais la souris : un clic sur l'avatar ou le champ mot de passe passe au travers.
+    private func makeBackgroundWindow(level: NSWindow.Level) -> NSPanel {
+        let w = makePanel(level: level)
+        w.ignoresMouseEvents = true
+        w.contentView = NSHostingView(rootView: LockArtworkBackground(model: model))
+        return w
+    }
+
+    private func makeContentWindow(level: NSWindow.Level) -> NSPanel {
+        let w = makePanel(level: level)
         w.contentView = FirstMouseHostingView(rootView: LockScreenView(model: model))
         return w
     }
 
-    /// Zone centrale de l'écran seulement : l'horloge système en haut et le champ
-    /// de mot de passe en bas restent visibles et accessibles.
-    private func position(_ w: NSWindow) {
-        guard let s = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return }
+    private func positionAll() {
+        guard let s = NSScreen.screens.first else { return } // écran principal, celui du mot de passe
         let f = s.frame
-        let size = CGSize(width: 480, height: f.height * 0.56)
-        // Position réglable : un décalage positif remonte la carte.
-        let offset = CGFloat(AppSettings.shared.lockScreenOffset)
-        w.setFrame(NSRect(x: f.midX - size.width / 2, y: f.minY + f.height * 0.2 + offset,
-                          width: size.width, height: size.height), display: true)
+        // Le contenu s'arrête au-dessus de la zone de l'avatar et du mot de passe (17 % du bas).
+        let free = f.height * 0.17
+        let content = NSRect(x: f.minX, y: f.minY + free, width: f.width, height: f.height - free)
+        for bg in [lockBackground, previewBackground].compactMap({ $0 }) { bg.setFrame(f, display: true) }
+        for w in [lockWindow, previewWindow].compactMap({ $0 }) { w.setFrame(content, display: true) }
     }
 }
 
@@ -144,27 +203,120 @@ struct LockScreenView: View {
     @ObservedObject var settings = AppSettings.shared
 
     var body: some View {
-        VStack(spacing: 0) {
-            if settings.lockScreenWidgets { LockWidgetsRow(model: model) }
-            Spacer(minLength: 12)
-            if let track = model.track {
-                VStack(spacing: 18) {
-                    if settings.lockScreenBigArt {
-                        ArtworkView(image: model.artwork, size: 220, radius: 26)
-                            .shadow(color: .black.opacity(0.45), radius: 30, y: 14)
-                            .id(track.id)
-                            .transition(.scale(scale: 0.9).combined(with: .opacity))
+        GeometryReader { geo in
+            let fullScreen = settings.lockScreenStyle == .fullScreen && model.track != nil
+            ZStack(alignment: .top) {
+                VStack(spacing: 0) {
+                    if fullScreen {
+                        // Le fond recouvre l'horloge de macOS : on dessine la nôtre.
+                        LockClock(accent: model.accent)
+                            .padding(.top, geo.size.height * 0.07)
+                        if settings.lockScreenWidgets { LockWidgetsRow(model: model).padding(.top, 8) }
+                    } else {
+                        Spacer().frame(height: geo.size.height * 0.24) // sous l'horloge de macOS
+                        if settings.lockScreenWidgets { LockWidgetsRow(model: model) }
                     }
-                    LockPlayerCard(model: model, track: track)
+                    Spacer(minLength: 16)
+                    if let track = model.track {
+                        VStack(spacing: 22) {
+                            if settings.lockScreenStyle != .card {
+                                ArtworkView(image: model.artwork,
+                                            size: min(geo.size.height * (fullScreen ? 0.34 : 0.28), 320),
+                                            radius: 14)
+                                    .shadow(color: .black.opacity(0.5), radius: 34, y: 18)
+                                    .id(track.id)
+                                    .transition(.scale(scale: 0.92).combined(with: .opacity))
+                            }
+                            LockPlayerCard(model: model, track: track, compact: fullScreen)
+                        }
+                        .offset(y: -CGFloat(settings.lockScreenOffset))
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
+                    Spacer(minLength: 28)
                 }
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .frame(width: geo.size.width, height: geo.size.height)
             }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
-        .padding(.top, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.5, dampingFraction: 0.85), value: model.track?.id)
-        .animation(.spring(response: 0.5, dampingFraction: 0.85), value: settings.lockScreenBigArt)
+        .animation(.spring(response: 0.5, dampingFraction: 0.85), value: settings.lockScreenStyle)
         .environment(\.colorScheme, .dark)
+    }
+}
+
+/// Fond plein écran : la pochette en grand, nette au centre et floutée vers les bords,
+/// avec un voile en haut et en bas pour que l'heure et le lecteur restent lisibles.
+struct LockArtworkBackground: View {
+    @ObservedObject var model: NotchModel
+    @ObservedObject var settings = AppSettings.shared
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack {
+                Color.black
+                if let image = model.artwork {
+                    // Couche floue : remplit tout l'écran.
+                    art(image, size).blur(radius: 70, opaque: true).saturation(1.15)
+                    // Couche nette : visible au centre, fondue vers les bords.
+                    art(image, size)
+                        .mask(RadialGradient(stops: [.init(color: .black, location: 0),
+                                                     .init(color: .black, location: 0.45),
+                                                     .init(color: .clear, location: 1)],
+                                             center: .center, startRadius: 0,
+                                             endRadius: max(size.width, size.height) * 0.62))
+                } else {
+                    LinearGradient(colors: [model.accent.opacity(0.7), .black], startPoint: .top, endPoint: .bottom)
+                }
+                // Lisibilité de l'heure (haut) et du lecteur (bas), et vignette sur les bords.
+                LinearGradient(stops: [.init(color: .black.opacity(0.45), location: 0),
+                                       .init(color: .clear, location: 0.32),
+                                       .init(color: .clear, location: 0.6),
+                                       .init(color: .black.opacity(0.55), location: 1)],
+                               startPoint: .top, endPoint: .bottom)
+                RadialGradient(colors: [.clear, .black.opacity(0.45)], center: .center,
+                               startRadius: min(size.width, size.height) * 0.45,
+                               endRadius: max(size.width, size.height) * 0.75)
+            }
+            .frame(width: size.width, height: size.height)
+            .clipped()
+            // Option : laisser voir l'avatar et le champ mot de passe en bas.
+            .mask(LinearGradient(stops: [.init(color: .black, location: 0),
+                                         .init(color: .black, location: settings.lockScreenShowPassword ? 0.8 : 1),
+                                         .init(color: settings.lockScreenShowPassword ? .clear : .black, location: 1)],
+                                 startPoint: .top, endPoint: .bottom))
+        }
+        .animation(.easeInOut(duration: 0.6), value: model.artwork.map { ObjectIdentifier($0) })
+        .environment(\.colorScheme, .dark)
+    }
+
+    private func art(_ image: NSImage, _ size: CGSize) -> some View {
+        Image(nsImage: image)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fill)
+            .frame(width: size.width, height: size.height)
+            .clipped()
+    }
+}
+
+/// Date et heure en grand, à empattements, teintées par la pochette.
+struct LockClock: View {
+    let accent: Color
+
+    var body: some View {
+        TimelineView(.everyMinute) { ctx in
+            VStack(spacing: 0) {
+                Text(ctx.date, format: .dateTime.weekday(.abbreviated).day().month(.abbreviated))
+                    .font(.system(size: 22, weight: .semibold, design: .serif))
+                    .foregroundStyle(.white.opacity(0.92))
+                Text(ctx.date, format: .dateTime.hour().minute())
+                    .font(.system(size: 112, weight: .bold, design: .serif).monospacedDigit())
+                    .foregroundStyle(LinearGradient(colors: [.white, accent.opacity(0.9)],
+                                                    startPoint: .top, endPoint: .bottom))
+            }
+            .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
+        }
     }
 }
 
@@ -200,11 +352,12 @@ struct LockWidgetsRow: View {
 struct LockPlayerCard: View {
     @ObservedObject var model: NotchModel
     let track: Track
+    var compact = false
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: compact ? 8 : 10) {
             HStack(spacing: 14) {
-                ArtworkView(image: model.artwork, size: 58, radius: 12)
+                if !compact { ArtworkView(image: model.artwork, size: 58, radius: 12) }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(track.title).font(.system(size: 14, weight: .semibold))
                     Text(track.artist).font(.system(size: 12)).foregroundStyle(.white.opacity(0.65))
@@ -216,10 +369,10 @@ struct LockPlayerCard: View {
             }
             LyricLineView(model: model).frame(height: 18)
             ProgressBarView(model: model, duration: track.duration)
-            ControlsView(model: model, spacing: 34)
+            ControlsView(model: model, spacing: compact ? 26 : 34)
         }
-        .padding(18)
-        .frame(width: 380)
+        .padding(compact ? 14 : 18)
+        .frame(width: compact ? 340 : 380)
         .modifier(GlassCard(cornerRadius: 30))
     }
 }

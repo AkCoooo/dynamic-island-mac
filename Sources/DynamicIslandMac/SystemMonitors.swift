@@ -1,4 +1,5 @@
 import AppKit
+import CoreBluetooth
 import IOBluetooth
 import IOKit.ps
 
@@ -68,14 +69,34 @@ final class PowerMonitor {
 /// Affiche la connexion d'un casque ou d'AirPods.
 /// La batterie des AirPods n'a pas d'API publique : on la lit seulement si
 /// IOBluetooth l'expose sur l'appareil, sinon on affiche « Connecté ».
-final class BluetoothMonitor: NSObject {
+final class BluetoothMonitor: NSObject, CBCentralManagerDelegate {
     private let model: NotchModel
-    private let startedAt = Date()
+    private var startedAt = Date()
     private var connectNotification: IOBluetoothUserNotification?
+    private var central: CBCentralManager?
 
+    /// IOBluetooth bloque le thread principal tant que l'autorisation Bluetooth n'est pas tranchée :
+    /// on la demande d'abord, sans bloquer, via Core Bluetooth, et on n'écoute IOBluetooth qu'une fois accordée.
     init(model: NotchModel) {
         self.model = model
         super.init()
+        switch CBManager.authorization {
+        case .allowedAlways:
+            startListening()
+        case .notDetermined:
+            central = CBCentralManager(delegate: self, queue: .main) // affiche la demande, sans bloquer
+        default:
+            debugLog("bluetooth: autorisation refusée, notifications d'écouteurs désactivées")
+        }
+    }
+
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        guard CBManager.authorization == .allowedAlways, connectNotification == nil else { return }
+        startListening()
+    }
+
+    private func startListening() {
+        startedAt = Date()
         connectNotification = IOBluetoothDevice.register(forConnectNotifications: self,
                                                          selector: #selector(deviceConnected(_:device:)))
     }

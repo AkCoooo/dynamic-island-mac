@@ -64,7 +64,7 @@ final class NowPlayingService: PlaybackControls {
                 set s to player state as string
                 if s is "stopped" then return {s}
                 set t to current track
-                return {s, name of t, artist of t, album of t, duration of t, player position, id of t, artwork url of t}
+                return {s, name of t, artist of t, album of t, duration of t, player position, id of t, artwork url of t, shuffling as string, repeating as string}
             end tell
             """
         case .music:
@@ -73,7 +73,7 @@ final class NowPlayingService: PlaybackControls {
                 set s to player state as string
                 if s is "stopped" then return {s}
                 set t to current track
-                return {s, name of t, artist of t, album of t, duration of t, player position, (persistent ID of t) as string, ""}
+                return {s, name of t, artist of t, album of t, duration of t, player position, (persistent ID of t) as string, "", shuffle enabled as string, song repeat as string}
             end tell
             """
         }
@@ -103,6 +103,13 @@ final class NowPlayingService: PlaybackControls {
             )
             let position = result.atIndex(6)?.doubleValue ?? 0
             let artworkURL = result.atIndex(8)?.stringValue
+            let shuffle = result.atIndex(9)?.stringValue == "true"
+            let repeatRaw = result.atIndex(10)?.stringValue ?? "false"
+            let repeatMode: RepeatMode = switch repeatRaw {
+            case "true", "all": .all
+            case "one": .one
+            default: .off
+            }
 
             self.activeSource = source
             let changed = self.model.track?.id != track.id
@@ -110,6 +117,8 @@ final class NowPlayingService: PlaybackControls {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                 self.model.track = track
                 self.model.isPlaying = playing
+                self.model.shuffle = shuffle
+                self.model.repeatMode = repeatMode
             }
             if changed { self.trackChanged(track, artworkURL: artworkURL) }
         }
@@ -180,6 +189,25 @@ final class NowPlayingService: PlaybackControls {
     // MARK: - Commandes
 
     func togglePlayPause() { command("playpause") }
+
+    func toggleShuffle() {
+        switch activeSource {
+        case .spotify: command("set shuffling to not shuffling")
+        case .music: command("set shuffle enabled to not shuffle enabled")
+        case nil: break
+        }
+    }
+
+    /// Spotify : répétition oui/non. Musique : désactivée → tout → un seul morceau.
+    func cycleRepeat() {
+        switch activeSource {
+        case .spotify: command("set repeating to not repeating")
+        case .music:
+            let next = switch model.repeatMode { case .off: "all"; case .all: "one"; case .one: "off" }
+            command("set song repeat to \(next)")
+        case nil: break
+        }
+    }
     func nextTrack() { command("next track") }
     func previousTrack() { command("previous track") }
 

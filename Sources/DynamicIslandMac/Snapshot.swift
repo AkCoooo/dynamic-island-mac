@@ -78,6 +78,32 @@ enum Snapshot {
             }
         }
         AppSettings.shared.lockScreenBigArt = false
+
+        // Logo de la barre des menus, agrandi, sur fond clair et sur fond sombre.
+        let icon = MenuBarIcon.make()
+        let iconView = HStack(spacing: 30) {
+            ForEach([Color(white: 0.92), Color(white: 0.12)], id: \.self) { bg in
+                HStack(spacing: 24) {
+                    Image(nsImage: icon).resizable().renderingMode(.template).interpolation(.high)
+                        .frame(width: 160, height: 128)
+                    Image(nsImage: icon).renderingMode(.template)
+                }
+                .foregroundStyle(bg == Color(white: 0.92) ? .black : .white)
+                .padding(20)
+                .background(bg)
+            }
+        }
+        if let rep = render(iconView, size: CGSize(width: 560, height: 180)) {
+            try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("menubar-icon.png"))
+        }
+
+        // Hors bundle, l'app n'a pas d'icône : on prend celle du README.
+        if let icon = NSImage(contentsOfFile: "docs/icon.png") { NSApplication.shared.applicationIconImage = icon }
+        if let rep = render(SettingsView(settings: .shared), size: CGSize(width: 480, height: 660)) {
+            let url = dir.appendingPathComponent("settings.png")
+            try? rep.representation(using: .png, properties: [:])?.write(to: url)
+            print("snapshot: \(url.path)")
+        }
         return true
     }
 

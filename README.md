@@ -1,96 +1,124 @@
-# Dynamic Island Mac
+<p align="center">
+  <img src="docs/icon.png" width="160" height="160" alt="Icône de Dynamic Island Mac">
+</p>
 
-Une île dynamique pour l'encoche du Mac, écrite en Swift/SwiftUI.
+<h1 align="center">Dynamic Island Mac</h1>
+
+<p align="center">
+  <strong>Ton encoche prend vie.</strong><br>
+  Ta musique, tes paroles, tes fichiers et ton agenda dans une île qui s'ouvre au survol,<br>
+  et un lecteur en verre jusque sur l'écran verrouillé.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-14%2B-2A1A5E?style=flat-square&logo=apple&logoColor=white" alt="macOS 14 ou plus">
+  <img src="https://img.shields.io/badge/Swift-5.10-8C45D9?style=flat-square&logo=swift&logoColor=white" alt="Swift 5.10">
+  <img src="https://img.shields.io/badge/SwiftUI-natif-F96B85?style=flat-square" alt="SwiftUI natif">
+</p>
+
+<p align="center">
+  <a href="#installer"><strong>Installer</strong></a>
+  &nbsp;·&nbsp;
+  <a href="#ce-que-fait-lîle">Voir ce qu'elle fait</a>
+  &nbsp;·&nbsp;
+  <a href="#les-réglages">Les réglages</a>
+</p>
+
+<p align="center">
+  <img src="docs/screens/lecture.png" width="720" alt="L'île ouverte sur le morceau en cours">
+</p>
+
+---
+
+## Ce que fait l'île
+
+- **Elle s'ouvre au survol.** Passe la souris sur l'encoche : l'île se déplie avec un ressort et se replie quand tu t'éloignes. Pas d'encoche ? Elle dessine la sienne.
+- **Elle joue ta musique.** Spotify et Musique : pochette, titre, barre de lecture que tu peux faire glisser, aléatoire, répétition, et le choix de la sortie audio (haut-parleurs, AirPods, écran, AirPlay).
+- **Elle chante avec toi.** Les paroles se remplissent au fil du chant, et l'onglet Paroles les fait défiler. Un clic sur une ligne y saute.
+- **Elle garde tes fichiers.** Dépose un fichier sur l'île : il attend sur l'étagère jusqu'à ce que tu le glisses ailleurs ou l'envoies par AirDrop.
+- **Elle connaît ta journée.** Prochains rendez-vous, météo, minuteur et chrono, toujours à portée de souris.
+- **Elle te prévient.** Chargeur branché, batterie faible, AirPods connectés, volume, fin du minuteur : l'île s'élargit un instant, puis se fait oublier.
+
+<p align="center">
+  <img src="docs/screens/reduite.png" width="600" alt="L'île réduite pendant la lecture"><br>
+  <img src="docs/screens/charge.png" width="600" alt="Notification de charge">
+</p>
+
+| Paroles | Étagère |
+|---|---|
+| <img src="docs/screens/paroles.png" alt="Onglet Paroles"> | <img src="docs/screens/etagere.png" alt="Onglet Étagère"> |
+| **Agenda** | **Minuteur et chrono** |
+| <img src="docs/screens/agenda.png" alt="Onglet Agenda"> | <img src="docs/screens/minuteur.png" alt="Onglet Minuteur"> |
+
+## Sur l'écran verrouillé
+
+Quand tu verrouilles ton Mac (⌃⌘Q), la météo, la batterie et ton prochain rendez-vous s'affichent sous l'horloge, avec un lecteur en verre pour piloter la musique. Tu peux agrandir la pochette et monter ou descendre la carte. L'horloge de macOS et le champ du mot de passe restent visibles, et c'est toujours macOS qui déverrouille.
+
+> [!NOTE]
+> L'écran verrouillé passe par une API privée de macOS. Elle peut cesser de fonctionner après une mise à jour du système : l'option se désactive dans les réglages.
 
 ## Installer
 
-Prérequis : macOS 14 ou plus récent, et les Command Line Tools (`xcode-select --install`). Xcode n'est pas nécessaire.
+Il faut macOS 14 ou plus récent et les outils de ligne de commande d'Xcode (`xcode-select --install`).
 
 ```bash
+git clone https://github.com/AkCoooo/dynamic-island-mac.git
+cd dynamic-island-mac
 ./scripts/install.sh
 ```
 
-Le script compile l'app, la copie dans `/Applications/Dynamic Island Mac.app` et la lance. Relancez-le après chaque modification du code.
+Le script compile, emballe `Dynamic Island Mac.app` avec son icône, la signe, l'installe dans `~/Applications` et la lance. Tu la retrouves ensuite dans le Launchpad et dans Spotlight, comme n'importe quelle app.
 
-Pour seulement compiler sans installer :
+Au premier lancement, les réglages s'ouvrent pour te montrer où tout se trouve.
 
-```bash
-./scripts/build-app.sh
-open "build/Dynamic Island Mac.app"
-```
+## Les réglages
 
-Dynamic Island Mac n'a pas d'icône dans le Dock. Tout passe par l'icône en forme de capsule dans la barre des menus : **Réglages…**, **Aperçu de l'écran verrouillé** et **Quitter**.
+<img src="docs/screens/reglages.png" width="360" align="right" alt="Fenêtre de réglages">
 
-## Fonctions
+Trois chemins y mènent :
 
-### L'île
+- **Relance l'app** depuis le Launchpad, Spotlight ou le dossier Applications.
+- **Clique sur ⚙** en haut à droite de l'île ouverte.
+- **Clique sur le logo de l'île** dans la barre des menus, puis sur **Réglages…** Tu peux masquer ce logo dans les réglages : les deux autres chemins suffisent.
 
-- **Ouverture au survol** de l'encoche, avec une animation à ressort. Sans encoche, Dynamic Island Mac dessine sa propre île.
-- **Onglets** dans l'île ouverte :
-  - **Lecture** : pochette, titre, artiste, ligne de paroles, barre de progression déplaçable, commandes.
-  - **Paroles** : défilement synchronisé. Un clic sur une ligne saute à ce moment du morceau.
-  - **Étagère** : déposez des fichiers sur l'île, puis glissez-les ailleurs, envoyez-les par AirDrop ou ouvrez-les d'un double-clic.
-  - **Agenda** : les prochains événements d'aujourd'hui et de demain.
-  - **Minuteur et chrono** : le décompte reste visible dans l'île réduite.
-- **Île réduite** : pochette et égaliseur pendant la lecture. Elle reste affichée en pause et ne se replie que lorsqu'aucun morceau n'est chargé.
-- **Notifications** : chargeur branché, batterie faible, écouteurs Bluetooth, volume, fin du minuteur.
-- **Météo** (Open-Meteo) et **batterie** dans la bande du haut.
+Tu y choisis l'apparence de l'île (Noir ou Verre), le délai d'ouverture, les notifications, les options de l'écran verrouillé, les coins arrondis en bas de l'écran, la ville pour la météo et le lancement à l'ouverture de session.
 
-### L'écran verrouillé
+<br clear="right">
 
-Quand l'écran est verrouillé, Dynamic Island Mac affiche au centre une rangée de widgets (météo, batterie, prochain rendez-vous) et un lecteur en verre avec les commandes. Une option affiche aussi une grande pochette. L'horloge système et le champ de mot de passe ne sont pas recouverts.
+## Autorisations
 
-Cette fonction s'appuie sur une API privée de macOS (SkyLight). Elle ne fait qu'afficher : le déverrouillage reste entièrement géré par macOS. Elle peut cesser de fonctionner après une mise à jour du système.
+macOS te les demande une fois, au moment où l'app en a besoin :
 
-### Autres
-
-- Coins du bas de l'écran arrondis (option).
-- Retour haptique sur le trackpad.
-- Lancement à l'ouverture de session.
-- Thème « Noir » ou « Verre » pour l'île ouverte.
-
-## Permissions demandées par macOS
-
-| Permission | Pourquoi |
+| Autorisation | Pourquoi |
 |---|---|
-| Automatisation (Spotify, Musique) | Lire la position et la pochette, piloter la lecture |
-| Bluetooth | Détecter la connexion des écouteurs |
-| Calendriers | Afficher les prochains événements |
-| Position | Météo locale (inutile si une ville est saisie dans les réglages) |
+| **Automatisation** (Spotify, Musique) | Lire le morceau en cours et piloter la lecture |
+| **Bluetooth** | Voir quand tes écouteurs se connectent |
+| **Calendriers** | Afficher tes prochains rendez-vous |
+| **Position** | La météo de là où tu es (inutile si tu saisis une ville) |
 
-Dynamic Island Mac n'a besoin ni de l'Accessibilité ni de l'enregistrement d'écran.
+Ni l'Accessibilité, ni l'enregistrement de l'écran ne sont nécessaires.
 
-## Limites connues
+## Ce qu'elle ne fait pas (encore)
 
-- **Batterie des AirPods** : aucune API publique ne la fournit. Dynamic Island Mac l'affiche seulement si IOBluetooth l'expose, sinon il écrit « Connecté ».
-- **Autres lecteurs** (navigateurs, Tidal…) : pas pris en charge. MediaRemote est réservé aux apps Apple depuis macOS 15.4.
-- **HUD de volume** : celui de macOS reste affiché en plus de celui de Dynamic Island Mac. Le masquer demanderait d'intercepter les touches (permission Accessibilité).
-- **Luminosité** : pas d'API publique pour la lire, donc pas de HUD de luminosité.
-- **Distribution** : signature ad hoc, pour un usage local. Pour distribuer l'app, il faut une signature Developer ID et une notarisation.
+- **La batterie des AirPods** n'a pas d'API publique : l'île l'affiche quand macOS la fournit, sinon elle écrit « Connecté ».
+- **Les autres lecteurs** (navigateurs, Tidal…) ne sont pas suivis : macOS réserve cette information aux apps d'Apple.
+- **Le HUD de volume de macOS** reste affiché en plus de celui de l'île.
 
-## Vérifier le design sans écran
-
-```bash
-swift build
-.build/debug/DynamicIslandMac --snapshot /tmp/dynamic-island-snaps
-```
-
-Cette commande rend chaque état de l'île et de l'écran verrouillé en PNG, avec des données fictives. `open "build/Dynamic Island Mac.app" --args --preview-expanded` garde l'île ouverte en permanence.
-
-## Structure
+## Sous le capot
 
 | Fichier | Rôle |
 |---|---|
-| `AppDelegate.swift` | Démarrage, menu de la barre des menus |
-| `NotchWindowController.swift` | Panneau transparent, positionnement sur l'encoche, survol |
-| `NotchView.swift` | Forme de l'île, onglets et toutes les vues de l'île |
-| `NotchModel.swift` | État partagé, modes, tailles, minuteur, étagère |
-| `Settings.swift` | Réglages persistants, fenêtre de réglages, haptique |
-| `NowPlayingService.swift` | Spotify et Musique (notifications + AppleScript), pochettes |
-| `LyricsService.swift` | Paroles LRCLIB et lecture du format LRC |
-| `SystemMonitors.swift` | Batterie (IOKit) et écouteurs (IOBluetooth) |
-| `VolumeMonitor.swift` | Volume de la sortie audio (Core Audio) |
-| `AgendaWeather.swift` | Agenda (EventKit) et météo (Open-Meteo) |
-| `LockScreen.swift` | Widgets et lecteur sur l'écran verrouillé |
-| `CornerOverlay.swift` | Coins arrondis en bas de l'écran |
-| `Snapshot.swift` | Rendu PNG des états pour vérifier le design |
+| `NotchWindowController.swift` | La vitre transparente posée sur l'encoche, et le survol |
+| `NotchView.swift` | La forme de l'île, ses onglets et toutes ses vues |
+| `NotchModel.swift` | L'état partagé : mode, taille, morceau, minuteur, étagère |
+| `NowPlayingService.swift` | Spotify et Musique, pochettes, commandes |
+| `LyricsService.swift` | Les paroles synchronisées, depuis [LRCLIB](https://lrclib.net) |
+| `LockScreen.swift` | Les widgets et le lecteur de l'écran verrouillé |
+| `AudioOutputs.swift`, `VolumeMonitor.swift` | Sorties audio et volume (Core Audio) |
+| `SystemMonitors.swift` | Batterie et écouteurs Bluetooth |
+| `AgendaWeather.swift` | Agenda (EventKit) et météo ([Open-Meteo](https://open-meteo.com)) |
+| `Settings.swift` | Les réglages et leur fenêtre |
+| `CornerOverlay.swift`, `KeepAwake.swift` | Coins arrondis, écran gardé allumé |
+| `Snapshot.swift` | Rendu des écrans en PNG, pour vérifier le design sans écran |
+
+Pour régénérer les captures : `swift build && .build/debug/DynamicIslandMac --snapshot /tmp/captures`.

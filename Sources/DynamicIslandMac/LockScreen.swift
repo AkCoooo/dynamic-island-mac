@@ -130,7 +130,9 @@ final class LockScreenController {
         guard let s = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return }
         let f = s.frame
         let size = CGSize(width: 480, height: f.height * 0.56)
-        w.setFrame(NSRect(x: f.midX - size.width / 2, y: f.minY + f.height * 0.2,
+        // Position réglable : un décalage positif remonte la carte.
+        let offset = CGFloat(AppSettings.shared.lockScreenOffset)
+        w.setFrame(NSRect(x: f.midX - size.width / 2, y: f.minY + f.height * 0.2 + offset,
                           width: size.width, height: size.height), display: true)
     }
 }
@@ -143,7 +145,7 @@ struct LockScreenView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            LockWidgetsRow(model: model)
+            if settings.lockScreenWidgets { LockWidgetsRow(model: model) }
             Spacer(minLength: 12)
             if let track = model.track {
                 VStack(spacing: 18) {

@@ -1,3 +1,4 @@
+import CoreAudio
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -305,6 +306,7 @@ struct ExpandedView: View {
                     .foregroundStyle(.white.opacity(0.75))
                 }
                 if let b = model.battery { BatteryBadge(battery: b) }
+                SettingsGearButton { model.openSettings?() }
             }
         }
         .padding(.horizontal, 18)
@@ -329,6 +331,24 @@ struct TabButton: View {
         }
         .buttonStyle(.plain)
         .help(tab.title)
+        .onHover { hovering = $0 }
+    }
+}
+
+struct SettingsGearButton: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(hovering ? 0.95 : 0.55))
+                .frame(width: 24, height: 22)
+                .background(Capsule().fill(.white.opacity(hovering ? 0.12 : 0)))
+        }
+        .buttonStyle(.plain)
+        .help("Réglages")
         .onHover { hovering = $0 }
     }
 }
@@ -386,14 +406,74 @@ struct ControlsView: View {
 
     var body: some View {
         HStack(spacing: spacing) {
+            ToggleIconButton(symbol: "shuffle", active: model.shuffle) { model.controls?.toggleShuffle() }
             ControlButton(symbol: "backward.fill", size: 15) { model.controls?.previousTrack(); Haptics.tap() }
             ControlButton(symbol: model.isPlaying ? "pause.fill" : "play.fill", size: 21) {
                 model.controls?.togglePlayPause()
                 Haptics.tap()
             }
             ControlButton(symbol: "forward.fill", size: 15) { model.controls?.nextTrack(); Haptics.tap() }
+            ToggleIconButton(symbol: model.repeatMode == .one ? "repeat.1" : "repeat",
+                             active: model.repeatMode != .off) { model.controls?.cycleRepeat() }
         }
         .frame(maxWidth: .infinity)
+        .overlay(alignment: .trailing) { AudioOutputMenu() }
+    }
+}
+
+/// Petit bouton à deux états (aléatoire, répétition).
+struct ToggleIconButton: View {
+    let symbol: String
+    let active: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: { action(); Haptics.tap() }) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(active ? .white : .white.opacity(hovering ? 0.7 : 0.4))
+                .frame(width: 26, height: 24)
+                .background(Circle().fill(.white.opacity(active ? 0.16 : 0)))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+}
+
+/// Choix de la sortie audio (haut-parleurs, AirPods, écran, AirPlay…).
+struct AudioOutputMenu: View {
+    @State private var outputs: [AudioOutput] = []
+    @State private var current: AudioObjectID = 0
+
+    var body: some View {
+        Menu {
+            ForEach(outputs) { output in
+                Button {
+                    AudioOutputs.setDefault(output.id)
+                    current = output.id
+                    Haptics.tap()
+                } label: {
+                    Label(output.name, systemImage: output.id == current ? "checkmark" : output.symbol)
+                }
+            }
+        } label: {
+            Image(systemName: outputs.first(where: { $0.id == current })?.symbol ?? "airplayaudio")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.6))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Sortie audio")
+        .onAppear(perform: reload)
+        .onHover { if $0 { reload() } }
+    }
+
+    private func reload() {
+        outputs = AudioOutputs.all()
+        current = AudioOutputs.defaultOutput
     }
 }
 
@@ -459,26 +539,66 @@ struct ProgressBarView: View {
 
 struct LyricLineView: View {
     @ObservedObject var model: NotchModel
+    @ObservedObject var settings = AppSettings.shared
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.2)) { context in
+        TimelineView(.periodic(from: .now, by: settings.progressiveLyrics ? 0.05 : 0.2)) { context in
             let index = model.currentLyricIndex(at: context.date)
             let text = index.map { model.lyrics[$0].text } ?? ""
+            let shown = text.isEmpty ? (model.lyrics.isEmpty ? "" : "♪") : text
             ZStack(alignment: .leading) {
-                Text(text.isEmpty ? (model.lyrics.isEmpty ? "" : "♪") : text)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(model.accent)
-                    .shadow(color: model.accent.opacity(0.6), radius: 6)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .id(index ?? -1)
-                    .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
-                                            removal: .move(edge: .top).combined(with: .opacity)))
+                if settings.progressiveLyrics {
+                    KaraokeText(text: shown, progress: model.lyricProgress(at: context.date), accent: model.accent)
+                        .id(index ?? -1)
+                        .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
+                                                removal: .move(edge: .top).combined(with: .opacity)))
+                } else {
+                    Text(shown)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(model.accent)
+                        .shadow(color: model.accent.opacity(0.6), radius: 6)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .id(index ?? -1)
+                        .transition(.asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity),
+                                                removal: .move(edge: .top).combined(with: .opacity)))
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .clipped()
             .animation(.spring(response: 0.35, dampingFraction: 0.85), value: index)
         }
+    }
+}
+
+/// La ligne s'allume de gauche à droite au rythme du chant. Le minutage par mot n'existe pas
+/// dans les paroles LRC : l'avancement est réparti sur la durée de la ligne.
+struct KaraokeText: View {
+    let text: String
+    let progress: Double
+    let accent: Color
+
+    var body: some View {
+        let label = Text(text)
+            .font(.system(size: 13, weight: .semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+        label
+            .foregroundStyle(.white.opacity(0.35))
+            .overlay(alignment: .leading) {
+                label
+                    .foregroundStyle(accent)
+                    .shadow(color: accent.opacity(0.6), radius: 6)
+                    .mask(alignment: .leading) {
+                        GeometryReader { geo in
+                            LinearGradient(stops: [.init(color: .black, location: 0),
+                                                   .init(color: .black, location: max(0, progress - 0.02)),
+                                                   .init(color: .clear, location: min(1, progress + 0.04))],
+                                           startPoint: .leading, endPoint: .trailing)
+                                .frame(width: geo.size.width)
+                        }
+                    }
+            }
     }
 }
 

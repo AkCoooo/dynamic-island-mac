@@ -27,6 +27,11 @@ final class AppSettings: ObservableObject {
     @Published var weatherCity: String { didSet { defaults.set(weatherCity, forKey: "weatherCity") } }
     @Published var lockScreen: Bool { didSet { defaults.set(lockScreen, forKey: "lockScreen") } }
     @Published var lockScreenBigArt: Bool { didSet { defaults.set(lockScreenBigArt, forKey: "lockScreenBigArt") } }
+    @Published var showMenuBarIcon: Bool { didSet { defaults.set(showMenuBarIcon, forKey: "showMenuBarIcon") } }
+    @Published var keepAwakeWhilePlaying: Bool { didSet { defaults.set(keepAwakeWhilePlaying, forKey: "keepAwakeWhilePlaying") } }
+    @Published var progressiveLyrics: Bool { didSet { defaults.set(progressiveLyrics, forKey: "progressiveLyrics") } }
+    @Published var lockScreenWidgets: Bool { didSet { defaults.set(lockScreenWidgets, forKey: "lockScreenWidgets") } }
+    @Published var lockScreenOffset: Double { didSet { defaults.set(lockScreenOffset, forKey: "lockScreenOffset") } }
     @Published var launchAtLoginError: String?
 
     private init() {
@@ -35,7 +40,13 @@ final class AppSettings: ObservableObject {
             "chargeAlerts": true, "bluetoothAlerts": true, "volumeHUD": true, "haptics": true,
             "roundedCorners": false, "cornerRadius": 10.0, "showCalendar": true, "showWeather": true,
             "weatherCity": "", "lockScreen": true, "lockScreenBigArt": false,
+            "keepAwakeWhilePlaying": false, "showMenuBarIcon": true, "progressiveLyrics": true, "lockScreenWidgets": true, "lockScreenOffset": 0.0,
         ])
+        showMenuBarIcon = defaults.bool(forKey: "showMenuBarIcon")
+        keepAwakeWhilePlaying = defaults.bool(forKey: "keepAwakeWhilePlaying")
+        progressiveLyrics = defaults.bool(forKey: "progressiveLyrics")
+        lockScreenWidgets = defaults.bool(forKey: "lockScreenWidgets")
+        lockScreenOffset = defaults.double(forKey: "lockScreenOffset")
         lockScreen = defaults.bool(forKey: "lockScreen")
         lockScreenBigArt = defaults.bool(forKey: "lockScreenBigArt")
         theme = IslandTheme(rawValue: defaults.string(forKey: "theme") ?? "") ?? .black
@@ -79,28 +90,71 @@ enum Haptics {
 
 // MARK: - Fenêtre de réglages
 
-final class SettingsWindowController {
+/// Fenêtre de réglages. Tant qu'elle est ouverte, l'app apparaît dans le Dock et dans ⌘⇥
+/// comme une app normale ; à la fermeture, elle redevient discrète (barre des menus seulement).
+final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
+    var previewLockScreen: (() -> Void)?
 
     func show() {
         if window == nil {
-            let hosting = NSHostingController(rootView: SettingsView(settings: .shared))
-            let w = NSWindow(contentViewController: hosting)
-            w.title = "Réglages de Dynamic Island Mac"
-            w.styleMask = [.titled, .closable]
+            let view = SettingsView(settings: .shared,
+                                    previewLockScreen: { [weak self] in self?.previewLockScreen?() })
+            let w = NSWindow(contentViewController: NSHostingController(rootView: view))
+            w.title = "Dynamic Island Mac"
+            w.styleMask = [.titled, .closable, .miniaturizable]
             w.isReleasedWhenClosed = false
+            w.delegate = self
             w.center()
             window = w
         }
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
     }
 }
 
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
+    var previewLockScreen: () -> Void = {}
 
     var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+            form
+        }
+        .frame(width: 480, height: 660)
+    }
+
+    private var header: some View {
+        HStack(spacing: 14) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 64, height: 64)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Dynamic Island Mac").font(.title2.weight(.semibold))
+                Text("Survole l'encoche pour ouvrir l'île.\nRelance l'app ou clique ⚙ dans l'île pour revenir ici.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    Button("Aperçu de l'écran verrouillé", action: previewLockScreen)
+                    Button("Quitter l'app") { NSApp.terminate(nil) }
+                }
+                .controlSize(.small)
+                .padding(.top, 4)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 16)
+    }
+
+    private var form: some View {
         Form {
             Section("Général") {
                 Toggle("Ouvrir Dynamic Island Mac à l'ouverture de session", isOn: Binding(
@@ -112,8 +166,18 @@ struct SettingsView: View {
                 if let error = settings.launchAtLoginError {
                     Text(error).font(.caption).foregroundStyle(.red)
                 }
+                Toggle("Afficher l'icône dans la barre des menus", isOn: $settings.showMenuBarIcon)
+                if !settings.showMenuBarIcon {
+                    Text("Pour revenir ici : relance l'app depuis le Launchpad ou Spotlight, ou clique ⚙ dans l'île.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Toggle("Afficher sur l'écran principal", isOn: $settings.preferMainScreen)
                 Toggle("Retour haptique", isOn: $settings.haptics)
+            }
+
+            Section("Musique") {
+                Toggle("Paroles qui se remplissent au fil du chant", isOn: $settings.progressiveLyrics)
+                Toggle("Garder l'écran allumé pendant la lecture", isOn: $settings.keepAwakeWhilePlaying)
             }
 
             Section("Île") {
@@ -137,8 +201,17 @@ struct SettingsView: View {
 
             Section("Écran verrouillé") {
                 Toggle("Lecteur et widgets sur l'écran verrouillé", isOn: $settings.lockScreen)
-                Toggle("Grande pochette", isOn: $settings.lockScreenBigArt)
-                    .disabled(!settings.lockScreen)
+                Group {
+                    Toggle("Widgets météo, batterie et agenda", isOn: $settings.lockScreenWidgets)
+                    Toggle("Grande pochette", isOn: $settings.lockScreenBigArt)
+                    LabeledContent("Position verticale") {
+                        HStack {
+                            Slider(value: $settings.lockScreenOffset, in: -160...160, step: 10)
+                            Button("Centrer") { settings.lockScreenOffset = 0 }.controlSize(.small)
+                        }
+                    }
+                }
+                .disabled(!settings.lockScreen)
                 Text("Utilise une API privée de macOS : peut cesser de fonctionner après une mise à jour.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -162,7 +235,5 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
-        .fixedSize(horizontal: false, vertical: true)
     }
 }

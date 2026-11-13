@@ -93,9 +93,13 @@ enum IslandTab: String, CaseIterable, Identifiable {
     }
 }
 
+enum RepeatMode { case off, all, one }
+
 /// Ce que l'île sait faire faire au lecteur.
 protocol PlaybackControls: AnyObject {
     func togglePlayPause()
+    func toggleShuffle()
+    func cycleRepeat()
     func nextTrack()
     func previousTrack()
     func seek(to seconds: Double)
@@ -119,9 +123,12 @@ final class NotchModel: ObservableObject {
     @Published var artwork: NSImage?
     @Published var accent: Color = .white
     @Published var lyrics: [LyricLine] = []
+    @Published var shuffle = false
+    @Published var repeatMode: RepeatMode = .off
     private(set) var positionAnchor: Double = 0
     private(set) var anchorDate = Date()
     weak var controls: PlaybackControls?
+    var openSettings: (() -> Void)?
 
     // Système
     @Published var battery: BatteryState?
@@ -192,6 +199,15 @@ final class NotchModel: ObservableObject {
         guard let track else { return 0 }
         let p = isPlaying ? positionAnchor + date.timeIntervalSince(anchorDate) : positionAnchor
         return min(max(p, 0), track.duration > 0 ? track.duration : p)
+    }
+
+    /// Avancement (0…1) dans la ligne de paroles en cours, pour le remplissage progressif.
+    func lyricProgress(at date: Date = Date()) -> Double {
+        guard let i = currentLyricIndex(at: date) else { return 0 }
+        let start = lyrics[i].time
+        let end = i + 1 < lyrics.count ? lyrics[i + 1].time : start + 4
+        guard end > start else { return 1 }
+        return min(1, max(0, (position(at: date) + 0.25 - start) / (end - start)))
     }
 
     func currentLyricIndex(at date: Date = Date()) -> Int? {

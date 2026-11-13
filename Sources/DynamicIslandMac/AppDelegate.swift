@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var calendar: CalendarService?
     private var weather: WeatherService?
     private var lockScreen: LockScreenController?
+    private var keepAwake: KeepAwake?
     private let settingsWindow = SettingsWindowController()
     private var statusItem: NSStatusItem?
     private var cancellables: Set<AnyCancellable> = []
@@ -33,24 +34,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         calendar = CalendarService(model: model)
         weather = WeatherService(model: model)
         lockScreen = LockScreenController(model: model)
+        keepAwake = KeepAwake(model: model)
         setupStatusItem()
+
+        // Trois accès aux réglages : le bouton ⚙ de l'île, le menu de la barre des menus,
+        // et un nouveau lancement de l'app (Applications, Launchpad, Spotlight).
+        model.openSettings = { [weak self] in self?.openSettings() }
+        settingsWindow.previewLockScreen = { [weak self] in self?.lockScreen?.togglePreview() }
+
+        AppSettings.shared.$showMenuBarIcon.dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] visible in self?.statusItem?.isVisible = visible }
+            .store(in: &cancellables)
 
         AppSettings.shared.$preferMainScreen.dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.notch?.reposition() }
             .store(in: &cancellables)
+
+        // Premier lancement : on ouvre les réglages pour montrer où ils sont.
+        let defaults = UserDefaults.standard
+        if !defaults.bool(forKey: "didLaunchBefore") {
+            defaults.set(true, forKey: "didLaunchBefore")
+            openSettings()
+        }
+    }
+
+    /// Double-clic sur l'app alors qu'elle tourne déjà : on ouvre les réglages.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openSettings()
+        return false
     }
 
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "capsule.fill", accessibilityDescription: "Dynamic Island Mac")
+        item.button?.image = MenuBarIcon.make()
+        item.isVisible = AppSettings.shared.showMenuBarIcon
 
         let menu = NSMenu()
         menu.addItem(withTitle: "Réglages…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "Aperçu de l'écran verrouillé", action: #selector(previewLockScreen),
                      keyEquivalent: "").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quitter Dynamic Island Mac", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quitter Dynamic Island Mac", action: #selector(NSApplication.terminate(_:)),
+                     keyEquivalent: "q")
         item.menu = menu
         statusItem = item
     }

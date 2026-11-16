@@ -90,11 +90,26 @@ final class LockScreenController {
             self?.positionAll()
         }
         prepareLockWindows()
-        // Le morceau peut arriver ou changer pendant le verrouillage : le fond suit.
-        model.$track.receive(on: RunLoop.main).sink { [weak self] _ in
-            guard let self, self.isLocked, AppSettings.shared.lockScreen else { return }
-            DispatchQueue.main.async { self.lockBackground?.alphaValue = self.showsBackground ? 1 : 0 }
-        }.store(in: &cancellables)
+        // Le morceau peut changer pendant le verrouillage, et un clic sur la pochette masque le fond.
+        model.$track.map { _ in () }.merge(with: model.$lockBackgroundHidden.map { _ in () })
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    let visible = self.showsBackground
+                    if self.isLocked, AppSettings.shared.lockScreen {
+                        NSAnimationContext.runAnimationGroup { ctx in
+                            ctx.duration = 0.35
+                            self.lockBackground?.animator().alphaValue = visible ? 1 : 0
+                        }
+                    }
+                    if let preview = self.previewBackground, self.previewWindow?.isVisible == true {
+                        visible ? preview.orderFrontRegardless() : preview.orderOut(nil)
+                        self.previewWindow?.orderFrontRegardless()
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
 
     private func prepareLockWindows() {
@@ -118,7 +133,7 @@ final class LockScreenController {
     }
 
     private var showsBackground: Bool {
-        AppSettings.shared.lockScreenStyle == .fullScreen && model.track != nil
+        AppSettings.shared.lockScreenStyle == .fullScreen && model.track != nil && !model.lockBackgroundHidden
     }
 
     private func locked() {
@@ -126,6 +141,7 @@ final class LockScreenController {
         debugLog("lock: écran verrouillé (option \(AppSettings.shared.lockScreen))")
         guard AppSettings.shared.lockScreen, let w = lockWindow, let bg = lockBackground else { return }
         refreshNowPlaying?()
+        model.lockBackgroundHidden = false // à chaque verrouillage, le fond revient
         positionAll()
         bg.alphaValue = showsBackground ? 1 : 0
         w.alphaValue = 1
@@ -204,7 +220,7 @@ struct LockScreenView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let fullScreen = settings.lockScreenStyle == .fullScreen && model.track != nil
+            let fullScreen = settings.lockScreenStyle == .fullScreen && model.track != nil && !model.lockBackgroundHidden
             ZStack(alignment: .top) {
                 VStack(spacing: 0) {
                     if fullScreen {
@@ -219,7 +235,7 @@ struct LockScreenView: View {
                     Spacer(minLength: 16)
                     if let track = model.track {
                         VStack(spacing: 22) {
-                            if settings.lockScreenStyle != .card {
+                            if settings.lockScreenStyle == .bigArt {
                                 ArtworkView(image: model.artwork,
                                             size: min(geo.size.height * (fullScreen ? 0.34 : 0.28), 320),
                                             radius: 14)
@@ -228,11 +244,21 @@ struct LockScreenView: View {
                                     .transition(.scale(scale: 0.92).combined(with: .opacity))
                             }
                             LockPlayerCard(model: model, track: track, compact: fullScreen)
+                            if settings.lockScreenStyle == .fullScreen {
+                                Text(model.lockBackgroundHidden
+                                     ? "Touche la pochette du lecteur pour la remettre en plein écran"
+                                     : "Touche la pochette du lecteur pour voir le mot de passe")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.55))
+                                    .shadow(color: .black.opacity(0.4), radius: 4)
+                            }
                         }
                         .offset(y: -CGFloat(settings.lockScreenOffset))
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
+                    // Style plein écran : le lecteur reste en bas, que le fond soit affiché ou masqué.
                     Spacer(minLength: 28)
+                        .frame(maxHeight: settings.lockScreenStyle == .fullScreen ? geo.size.height * 0.07 : .infinity)
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
             }
@@ -357,7 +383,13 @@ struct LockPlayerCard: View {
     var body: some View {
         VStack(spacing: compact ? 8 : 10) {
             HStack(spacing: 14) {
-                if !compact { ArtworkView(image: model.artwork, size: 58, radius: 12) }
+                ArtworkView(image: model.artwork, size: compact ? 50 : 58, radius: 12)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        guard AppSettings.shared.lockScreenStyle == .fullScreen else { return }
+                        model.lockBackgroundHidden.toggle()
+                    }
+                    .help("Masquer ou afficher la pochette en plein écran")
                 VStack(alignment: .leading, spacing: 2) {
                     Text(track.title).font(.system(size: 14, weight: .semibold))
                     Text(track.artist).font(.system(size: 12)).foregroundStyle(.white.opacity(0.65))

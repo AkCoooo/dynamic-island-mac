@@ -156,6 +156,8 @@ final class NotchModel: ObservableObject {
     @Published var events: [AgendaEvent] = []
     @Published var weather: WeatherInfo?
     @Published var clipboard: [ClipItem] = []
+    /// Écran verrouillé : fond plein écran masqué par un clic sur la pochette (pour le mot de passe).
+    @Published var lockBackgroundHidden = false
     @Published var shelf: [URL] = [] {
         didSet { UserDefaults.standard.set(shelf.map(\.path), forKey: "shelf") }
     }

@@ -55,13 +55,13 @@
 
 ## Sur l'écran verrouillé
 
-Verrouille ton Mac (⌃⌘Q) pendant que la musique joue, ou même en pause : la pochette remplit tout l'écran, nette au centre et floutée vers les bords. Par-dessus, l'heure en grand, la météo, la batterie, la pochette et un petit lecteur en verre pour piloter la musique sans déverrouiller.
+Verrouille ton Mac (⌃⌘Q) pendant que la musique joue, ou même en pause : la pochette remplit tout l'écran, nette au centre et floutée vers les bords. Par-dessus, l'heure en grand, la météo, la batterie et un petit lecteur en verre pour piloter la musique sans déverrouiller. Touche la pochette du lecteur pour masquer le fond et retrouver le champ du mot de passe ; touche-la encore pour le remettre.
 
 <p align="center">
   <img src="docs/screens/ecran-verrouille.jpg" width="720" alt="L'écran verrouillé avec la pochette en fond">
 </p>
 
-Deux styles plus sobres existent, « Grande pochette » et « Carte », qui gardent le fond d'écran de macOS. Le mot de passe et Touch ID marchent toujours : le fond laisse passer les clics, et une option garde le champ du mot de passe visible.
+Deux styles plus sobres existent, « Grande pochette » et « Carte », qui gardent le fond d'écran de macOS. Le mot de passe et Touch ID marchent toujours, même fond affiché : le fond laisse passer les clics, et une option garde le champ du mot de passe visible en permanence.
 
 > [!NOTE]
 > L'écran verrouillé passe par une API privée de macOS. Elle peut cesser de fonctionner après une mise à jour du système : l'option se désactive dans les réglages.

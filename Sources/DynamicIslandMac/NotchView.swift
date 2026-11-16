@@ -101,12 +101,13 @@ struct NotchRootView: View {
         case (true, .glass):
             ZStack {
                 VisualEffectView(material: .hudWindow, dark: true)
-                Color.black.opacity(0.12)
+                // Assez dense pour que ce qui passe derrière (neige de Flocon, fenêtres) ne se voie presque plus.
+                Color.black.opacity(0.5)
             }
         case (true, .light):
             ZStack {
                 VisualEffectView(material: .popover, dark: false)
-                Color.white.opacity(0.55)
+                Color.white.opacity(0.78)
             }
         default:
             Color.black

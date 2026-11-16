@@ -1,6 +1,11 @@
 import AppKit
 import SwiftUI
 
+extension NSWindow.Level {
+    /// Juste au-dessus du niveau « overlay » de macOS, où se placent les effets plein écran.
+    static let aboveOverlays = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.overlayWindow)) + 1)
+}
+
 /// Panneau transparent, sans bordure, posé au-dessus de la barre des menus.
 final class NotchPanel: NSPanel {
     override var canBecomeKey: Bool { false }
@@ -30,7 +35,8 @@ final class NotchWindowController {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 3)
+        // Au-dessus des calques « overlay » (la neige de Flocon par exemple), pour que rien ne recouvre l'île.
+        panel.level = .aboveOverlays
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         panel.isMovable = false
         panel.ignoresMouseEvents = !model.isExpanded

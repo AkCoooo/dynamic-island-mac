@@ -68,7 +68,7 @@ final class ClipboardPopupController {
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
-        p.level = .popUpMenu
+        p.level = .aboveOverlays
         p.isReleasedWhenClosed = false
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         p.contentView = host
